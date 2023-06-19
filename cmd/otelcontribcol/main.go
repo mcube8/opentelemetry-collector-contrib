@@ -35,3 +35,5 @@ func runInteractive(params otelcol.CollectorSettings) error {
 
 	return nil
 }
+
+// this is a test comment
