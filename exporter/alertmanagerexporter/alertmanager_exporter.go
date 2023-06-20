@@ -27,7 +27,7 @@ import (
 	"github.com/prometheus/common/model"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
-	"go.opentelemetry.io/collector/consumer/consumererror"
+	// "go.opentelemetry.io/collector/consumer/consumererror"
 	"go.opentelemetry.io/collector/exporter"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
 	"go.opentelemetry.io/collector/pdata/pcommon"
@@ -83,11 +83,10 @@ func (s *alertmanagerExporter) convertEventSliceToArray(eventslice ptrace.SpanEv
 func (s *alertmanagerExporter) extractEvents(td ptrace.Traces) ([]*alertmanagerEvent, error) {
 
 	//Stitch parent trace ID and span ID
-
 	rss := td.ResourceSpans()
 	var events []*alertmanagerEvent = nil
 	if rss.Len() == 0 {
-		return nil, nil
+		return nil, errors.New("no resource spans available")
 	}
 
 	for i := 0; i < rss.Len(); i++ {
@@ -95,7 +94,7 @@ func (s *alertmanagerExporter) extractEvents(td ptrace.Traces) ([]*alertmanagerE
 		ilss := rss.At(i).ScopeSpans()
 
 		if resource.Attributes().Len() == 0 && ilss.Len() == 0 {
-			return nil, nil
+			return nil, errors.New("no attributes or library spans available")
 		}
 
 		for j := 0; j < ilss.Len(); j++ {
@@ -140,25 +139,23 @@ func (s *alertmanagerExporter) convertEventstoAlertPayload(events []*alertmanage
 }
 
 func (s *alertmanagerExporter) postAlert(ctx context.Context, payload []model.Alert) error {
-
 	msg, _ := json.Marshal(payload)
 
 	req, err := http.NewRequestWithContext(ctx, "POST", s.endpoint, bytes.NewBuffer(msg))
-	req.Header.Set("Content-Type", "application/x-protobuf")
 	if err != nil {
-		return consumererror.NewPermanent(err)
+		s.settings.Logger.Debug("error creating HTTP request", zap.Error(err))
+		return fmt.Errorf("error creating HTTP request: %w", err)
 	}
+	req.Header.Set("Content-Type", "application/x-protobuf")
 
 	resp, err := s.client.Do(req)
-
 	if err != nil {
 		s.settings.Logger.Debug("error sending HTTP request", zap.Error(err))
 		return fmt.Errorf("error sending HTTP request: %w", err)
 	}
 
 	defer func() {
-		closeErr := resp.Body.Close()
-		if closeErr != nil {
+		if closeErr := resp.Body.Close(); closeErr != nil {
 			s.settings.Logger.Warn("Failed to close response body", zap.Error(closeErr))
 		}
 	}()

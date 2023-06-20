@@ -74,83 +74,48 @@ func createTracesAndSpan() (ptrace.Traces, ptrace.Span) {
 	return traces, span
 }
 
-func TestAlertManagerExporterExtractEvents0(t *testing.T) {
-	factory := NewFactory()
-	cfg := factory.CreateDefaultConfig().(*Config)
-	set := exportertest.NewNopCreateSettings()
-	am := newAlertManagerExporter(cfg, set.TelemetrySettings)
-	require.NotNil(t, am)
-
-	// make traces & a span
-	traces, _ := createTracesAndSpan()
-
-	// test - 0 event
-	got, err := am.extractEvents(traces)
-	assert.Nil(t, err)
-	assert.Equal(t, 0, len(got))
-}
-
-func TestAlertManagerExporterExtractEvents5(t *testing.T) {
-	factory := NewFactory()
-	cfg := factory.CreateDefaultConfig().(*Config)
-	set := exportertest.NewNopCreateSettings()
-	am := newAlertManagerExporter(cfg, set.TelemetrySettings)
-	require.NotNil(t, am)
-
-	// make traces & a span
-	traces, span := createTracesAndSpan()
-
-	// add 5 span events
-	for i := 0; i < 5; i++ {
-		event := span.Events().AppendEmpty()
-		// add event attributes
-		startTime := pcommon.Timestamp(time.Now().UnixNano())
-		event.SetTimestamp(startTime + 3)
-		event.SetName(fmt.Sprintf("unittest-event-%d", i))
-		attrs := event.Attributes()
-		attrs.Clear()
-		attrs.EnsureCapacity(4)
-		attrs.PutStr("attr1", fmt.Sprintf("unittest-baz-%d", i))
-		attrs.PutInt("attr2", 42)
-		attrs.PutDouble("attr3", 5.14)
+func TestAlertManagerExporterExtractEvents(t *testing.T) {
+	tests := []struct {
+		name   string
+		events int
+	}{
+		{"TestAlertManagerExporterExtractEvents0", 0},
+		{"TestAlertManagerExporterExtractEvents1", 1},
+		{"TestAlertManagerExporterExtractEvents5", 5},
 	}
 
-	// test - 5 events
-	got, err := am.extractEvents(traces)
-	assert.Nil(t, err)
-	assert.Equal(t, 5, len(got))
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			factory := NewFactory()
+			cfg := factory.CreateDefaultConfig().(*Config)
+			set := exportertest.NewNopCreateSettings()
+			am := newAlertManagerExporter(cfg, set.TelemetrySettings)
+			require.NotNil(t, am)
 
-func TestAlertManagerExporterExtractEvents1(t *testing.T) {
-	factory := NewFactory()
-	cfg := factory.CreateDefaultConfig().(*Config)
-	set := exportertest.NewNopCreateSettings()
-	am := newAlertManagerExporter(cfg, set.TelemetrySettings)
-	require.NotNil(t, am)
+			// make traces & a span
+			traces, span := createTracesAndSpan()
 
-	// make traces & a span
-	traces, span := createTracesAndSpan()
+			// add events
+			for i := 0; i < tt.events; i++ {
+				event := span.Events().AppendEmpty()
+				// add event attributes
+				startTime := pcommon.Timestamp(time.Now().UnixNano())
+				event.SetTimestamp(startTime + 3)
+				event.SetName(fmt.Sprintf("unittest-event-%d", i))
+				attrs := event.Attributes()
+				attrs.Clear()
+				attrs.EnsureCapacity(4)
+				attrs.PutStr("attr1", fmt.Sprintf("unittest-baz-%d", i))
+				attrs.PutInt("attr2", 42)
+				attrs.PutDouble("attr3", 5.14)
+			}
 
-	// add a span event w/ 3 attributes
-	event := span.Events().AppendEmpty()
-	// add event attributes
-	startTime := pcommon.Timestamp(time.Now().UnixNano())
-	event.SetTimestamp(startTime + 3)
-	event.SetName("unittest-event")
-	attrs := event.Attributes()
-	attrs.Clear()
-	attrs.EnsureCapacity(4)
-	attrs.PutStr("attr1", "unittest-baz")
-	attrs.PutInt("attr2", 42)
-	attrs.PutDouble("attr3", 5.14)
-
-	// test - 1 event
-	got, err := am.extractEvents(traces)
-	assert.Nil(t, err)
-	assert.Equal(t, 1, len(got))
-
-	// alerts := convertEventstoAlertPayload(got)
-	// am.postAlert(alerts)
+			// test - events
+			got, err := am.extractEvents(traces)
+			assert.Nil(t, err)
+			assert.Equal(t, tt.events, len(got))
+		})
+	}
 }
 
 func TestAlertManagerExporterEventNameAttributes(t *testing.T) {
